@@ -31,6 +31,7 @@ import 'package:PiliPlus/pages/member_dynamics/view.dart';
 import 'package:PiliPlus/pages/member_favorite/view.dart';
 import 'package:PiliPlus/pages/member_home/view.dart';
 import 'package:PiliPlus/pages/member_pgc/view.dart';
+import 'package:PiliPlus/pages/member_season_series/view.dart';
 import 'package:PiliPlus/pages/member_shop/view.dart';
 import 'package:PiliPlus/pages/member_video_web/archive/view.dart';
 import 'package:PiliPlus/pages/member_video_web/season_series/view.dart';
@@ -613,6 +614,10 @@ class _MemberPageState extends State<MemberPage> {
         'shop' => MemberShop(
           heroTag: _heroTag,
           mid: _mid,
+        ),
+        'ugcSeason' => SeasonSeriesPage(
+          mid: _mid,
+          heroTag: '${_heroTag}_ugcSeason',
         ),
         _ => Center(child: Text(item.title ?? '')),
       };
