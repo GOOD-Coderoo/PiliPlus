@@ -9,6 +9,7 @@ enum MemberTabType {
   bangumi('番剧'),
   cheese('课堂'),
   shop('小店'),
+  ugcSeason('合集'),
   ;
 
   static bool showMemberShop = Pref.showMemberShop;
