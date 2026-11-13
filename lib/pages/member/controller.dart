@@ -115,6 +115,10 @@ class MemberController extends CommonDataController<SpaceData, SpaceData?>
         data.series?.item?.isNotEmpty == true) {
       hasSeasonOrSeries = true;
     }
+    if (hasSeasonOrSeries == true &&
+        tab2?.any((e) => e.param == 'ugcSeason') != true) {
+      tab2?.add(const SpaceTab2(param: 'ugcSeason', title: '合集'));
+    }
     tab2?.retainWhere((item) => MemberTabType.contains(item.param!));
     if (tab2?.isNotEmpty == true) {
       if (data.hasItem != true && tab2!.first.param == 'home') {
