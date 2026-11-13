@@ -616,9 +616,9 @@ class _MemberPageState extends State<MemberPage> {
           mid: _mid,
         ),
         'ugcSeason' => SeasonSeriesPage(
-          mid: _mid,
-          heroTag: '${_heroTag}_ugcSeason',
-        ),
+              mid: _mid,
+              heroTag: _heroTag,
+            ),
         _ => Center(child: Text(item.title ?? '')),
       };
     }).toList(),
