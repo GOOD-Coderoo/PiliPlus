@@ -950,11 +950,25 @@ Future<void> _showMemberTabDialog(
     builder: (context) => SelectDialog<MemberTabType>(
       title: '用户页默认展示TAB',
       value: Pref.memberTab,
-      values: MemberTabType.values.map((e) => (e, e.title)).toList(),
+      values: _memberTabValues(),
     ),
   );
   if (res != null) {
     await GStorage.setting.put(SettingBoxKey.memberTab, res.index);
     setState();
   }
+}
+
+/// 仅调整设置弹窗内的显示顺序（把「合集」放到「投稿」之后），
+/// 不改枚举定义，故不影响历史设置中按 index 存取的值。
+List<(MemberTabType, String)> _memberTabValues() {
+  final list = MemberTabType.values.map((e) => (e, e.title)).toList();
+  final idx = list.indexWhere((e) => e.$1 == MemberTabType.ugcSeason);
+  if (idx > 0) {
+    final item = list.removeAt(idx);
+    final target =
+        list.indexWhere((e) => e.$1 == MemberTabType.contribute);
+    list.insert(target >= 0 ? target + 1 : list.length, item);
+  }
+  return list;
 }
