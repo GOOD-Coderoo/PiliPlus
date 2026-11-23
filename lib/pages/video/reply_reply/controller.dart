@@ -300,12 +300,6 @@ class VideoReplyReplyController extends ReplyController
   }
 
   @override
-  void queryBySort() {
-    if (replyTree.rawValue != null) return;
-    super.queryBySort();
-  }
-
-  @override
   Future<void> onRefresh() async {
     if (replyTree.rawValue != null) return Future.syncValue(null);
     if (_inflightReply != null) await _inflightReply;
@@ -378,6 +372,27 @@ class VideoReplyReplyController extends ReplyController
       removed: removedReply,
       foldDepth: Pref.foldDepth,
     );
+  }
+
+  /// 退出线程视图，回到普通列表。
+  ///
+  /// 线程视图一旦建树，[queryBySort] / [onRefresh] 的守卫会让「按热度/按时间」
+  /// 彻底失效（上游原本的设计：排序只能作用于普通列表）。切换排序前必须先
+  /// 退出线程视图，否则点击排序按钮毫无反应。
+  void exitThreadTree() {
+    if (replyTree.rawValue == null && !showReplyTree) return;
+    showReplyTree = false;
+    replyTree.value = null;
+    _autoThreadKicked = true; // 退出后不要被自动逻辑再次拉起
+  }
+
+  /// 排序切换。线程视图下先退出线程视图，再走基类的重载流程。
+  @override
+  void queryBySort() {
+    if (replyTree.rawValue != null) {
+      exitThreadTree();
+    }
+    super.queryBySort();
   }
 
   void toggleCollapseTree(int index) {
