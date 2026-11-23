@@ -77,6 +77,16 @@ extension type ReplyTree._(List<ReplyTreeNode> _vis)
     return a.id.compareTo(b.id);
   }
 
+  /// 一级评论「按热度」：点赞多的在前。
+  ///
+  /// 与 [replyCompare] 一样保留 ctime/id 作为次级键，保证结果稳定可比，
+  /// 否则点赞数相同的评论在每次重建时顺序都可能变。
+  static int hotCompare(ReplyInfo a, ReplyInfo b) {
+    final likeCmp = b.like.compareTo(a.like);
+    if (likeCmp != 0) return likeCmp;
+    return replyCompare(a, b);
+  }
+
   /// 从原始数据构建完整 DFS 序。
   /// [root] 可不提供。
   ///
@@ -92,6 +102,7 @@ extension type ReplyTree._(List<ReplyTreeNode> _vis)
     required Map<Int64, ReplyInfo> removed,
     int foldDepth = 0,
     ReplyTreeNode? root,
+    bool hotTopLevel = false,
   }) {
     assert(
       root == null || root.reply.id == rootId,
@@ -272,7 +283,9 @@ extension type ReplyTree._(List<ReplyTreeNode> _vis)
 
     final rootKids = children[rootId];
     if (rootKids != null) {
-      rootKids.sort(replyCompare);
+      // 一级按「热度/时间」排；子级始终按 ctime 升序（replyCompare），
+      // 保证楼内对话顺序可读。hotTopLevel 只作用于这一层。
+      rootKids.sort(hotTopLevel ? hotCompare : replyCompare);
       for (final i in rootKids) {
         walk(i, 0, root, true);
       }

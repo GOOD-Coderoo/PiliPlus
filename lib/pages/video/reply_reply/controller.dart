@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 
 import 'package:PiliPlus/grpc/bilibili/main/community/reply/v1.pb.dart'
-    show ReplyInfo, DetailListReply;
+    show ReplyInfo, DetailListReply, Mode;
 import 'package:PiliPlus/grpc/reply.dart';
 import 'package:PiliPlus/http/loading_state.dart';
 import 'package:PiliPlus/models/common/reply/reply_sort_type.dart';
@@ -12,6 +12,7 @@ import 'package:PiliPlus/pages/common/reply/fold/reply_fold_mixin.dart';
 import 'package:PiliPlus/pages/common/reply/reply_controller.dart';
 import 'package:PiliPlus/pages/video/reply_new/view.dart';
 import 'package:PiliPlus/pages/video/reply_reply/tree.dart';
+import 'package:PiliPlus/utils/feed_back.dart';
 import 'package:PiliPlus/utils/id_utils.dart';
 import 'package:PiliPlus/utils/storage_pref.dart';
 import 'package:extended_nested_scroll_view/extended_nested_scroll_view.dart';
@@ -372,26 +373,64 @@ class VideoReplyReplyController extends ReplyController
     // 自动流程可能在任何时刻被触发（含加载失败），故这里必须显式判空。
     final data = loadingState.rawValue.dataOrNull;
     if (data == null || data.isEmpty) return;
-    final seen = HashSet<Int64>();
-    data.retainWhere((i) => seen.add(i.id));
     showReplyTree = true;
+    _buildTreeFrom(data);
+  }
+
+  /// 用给定数据建树，并按 [sortType] 决定一级是否按热度排。
+  ///
+  /// 先复制一份再按 id 去重：上游原先直接对 loadingState 里的列表
+  /// `retainWhere`，会顺手改写数据源，影响切回普通列表后的内容。
+  void _buildTreeFrom(List<ReplyInfo> source) {
+    final seen = HashSet<Int64>();
+    final list = List<ReplyInfo>.of(source)..retainWhere((i) => seen.add(i.id));
+    if (list.isEmpty) return;
     replyTree.value = ReplyTree.build(
-      data: data,
+      data: list,
       seen: seen,
-      rootId: firstFloor.rawValue?.id ?? data.first.root,
+      rootId: firstFloor.rawValue?.id ?? list.first.root,
       removed: removedReply,
       foldDepth: Pref.foldDepth,
+      // 线程视图里「按热度」时只重排一级，子级仍按 ctime 保持楼内对话顺序
+      hotTopLevel: sortType.value == ReplySortType.hot,
     );
   }
 
   @override
   void queryBySort() {
-    // 同 onRefresh：只有正在显示线程视图时才屏蔽排序。
+    // 线程视图下：只切换排序类型并重建树，不重新拉取数据。
     //
-    // 上游用 replyTree != null 判断，但树建好后并不会随「切回普通列表」
-    // 销毁，导致点过一次线程化之后，普通列表下排序永久失效。
-    if (showReplyTree) return;
+    // 线程视图需要完整回复列表才能建树，重新拉取代价太大；而一级评论的排序
+    // 只依赖本地已有的 like / ctime 字段，重建一次树即可，无需联网。
+    if (showReplyTree) {
+      switch (sortType.value) {
+        case ReplySortType.time:
+          sortType.value = ReplySortType.hot;
+          mode = Mode.MAIN_LIST_HOT;
+          break;
+        case ReplySortType.hot:
+          sortType.value = ReplySortType.time;
+          mode = Mode.MAIN_LIST_TIME;
+          break;
+        case ReplySortType.select:
+          return;
+      }
+      feedBack();
+      rebuildTree();
+      return;
+    }
     super.queryBySort();
+  }
+
+  /// 按当前 [sortType] 重建线程树。数据不重拉，仅本地重排。
+  ///
+  /// 折叠状态会被重置为 [Pref.foldDepth] 的自动折叠，因为重排后节点下标全都变了，
+  /// 沿用旧的展开/收起记录只会错位。
+  void rebuildTree() {
+    if (!showReplyTree) return;
+    final data = loadingState.rawValue.dataOrNull;
+    if (data == null || data.isEmpty) return;
+    _buildTreeFrom(data);
   }
 
   void toggleCollapseTree(int index) {
