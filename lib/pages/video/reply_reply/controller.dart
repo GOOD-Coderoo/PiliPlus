@@ -63,7 +63,9 @@ class VideoReplyReplyController extends ReplyController
   @override
   void onInit() {
     super.onInit();
-    queryData();
+    queryData().whenComplete(() {
+      if (!isClosed) _maybeAutoThread();
+    });
   }
 
   @override
@@ -320,9 +322,52 @@ class VideoReplyReplyController extends ReplyController
   bool showReplyTree = false;
   final replyTree = Rxn<ReplyTree>();
 
+  /// 「自动线程化展示」开关。默认关闭，保持上游行为不变。
+  late final autoReplyThread = Pref.autoReplyThread;
+
+  /// 「自动线程化条数上限」。0 表示不限制。
+  late final autoReplyThreadMax = Pref.autoReplyThreadMax;
+
+  /// 自动模式是否已启动，保证只触发一次。
+  ///
+  /// 只触发一次的原因：用户手动关掉线程视图后，不应因为后续加载数据又被强行
+  /// 打开；也不该在每次分页时重复启动拉取循环。
+  bool _autoThreadKicked = false;
+
+  /// 「自动线程化展示」：进入楼中楼后自动拉取全部回复，拉完后由
+  /// [_fetchNextReply] 末尾的 [buildTree] 自动切换为线程视图。
+  ///
+  /// 线程视图需要完整回复列表（[isEnd] 为真）才能正确建树，所以这里先自动
+  /// 发起拉取循环，而不是直接建树——否则会基于不完整数据建出一棵残缺的树。
+  void _maybeAutoThread() {
+    if (!autoReplyThread || _autoThreadKicked || isClosed) return;
+    if (showReplyTree || replyTree.rawValue != null) return;
+    if (inFetchReply) return;
+
+    // 单页就拉完了，直接建树
+    if (isEnd && foldCard == null) {
+      _autoThreadKicked = true;
+      buildTree();
+      return;
+    }
+
+    // 评论过多时与手动按钮保持同样的克制：只有总量可控才自动拉全量，
+    // 避免一进楼中楼就静默消耗大量流量或触发风控。
+    // 上限来自设置项「自动线程化条数上限」，0 表示不限制。
+    final maxCount = autoReplyThreadMax;
+    if (maxCount > 0) {
+      final count = this.count.rawValue;
+      if (count != -1 && count > maxCount) return;
+    }
+    _autoThreadKicked = true;
+    nextReplyRound();
+  }
+
   void buildTree() {
-    final data = loadingState.rawValue.data!;
-    if (data.isEmpty) return;
+    // 建树依赖已成功加载的回复列表。非 Success 时 loadingState.data 会 throw，
+    // 自动流程可能在任何时刻被触发（含加载失败），故这里必须显式判空。
+    final data = loadingState.rawValue.dataOrNull;
+    if (data == null || data.isEmpty) return;
     final seen = HashSet<Int64>();
     data.retainWhere((i) => seen.add(i.id));
     showReplyTree = true;

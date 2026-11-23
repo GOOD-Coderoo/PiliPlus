@@ -4,6 +4,7 @@ import 'package:PiliPlus/common/widgets/custom_icon.dart';
 import 'package:PiliPlus/grpc/reply.dart';
 import 'package:PiliPlus/models/common/reply/reply_sort_type.dart';
 import 'package:PiliPlus/pages/setting/models/model.dart';
+import 'package:PiliPlus/pages/setting/widgets/select_dialog.dart';
 import 'package:PiliPlus/pages/setting/widgets/slider_dialog.dart';
 import 'package:PiliPlus/pages/video/reply/widgets/reply_item_grpc.dart';
 import 'package:PiliPlus/utils/storage.dart';
@@ -101,6 +102,19 @@ List<SettingsModel> get replySettings => [
     getSubtitle: () => '当前：「${Pref.foldDepth}」，0为不折叠',
     leading: const Icon(Icons.compress),
     onTap: _showReplyDepthDialog,
+  ),
+  const SwitchModel(
+    title: '自动线程化展示',
+    subtitle: '打开楼中楼时自动切换为线程化展示，无需再点按钮\n需加载全部回复后才能生效，长评论区会消耗较多流量',
+    leading: Icon(Icons.account_tree_outlined),
+    setKey: SettingBoxKey.autoReplyThread,
+    defaultVal: false,
+  ),
+  NormalModel(
+    title: '自动线程化条数上限',
+    getSubtitle: _autoThreadMaxSubtitle,
+    leading: const Icon(Icons.filter_alt_outlined),
+    onTap: _showAutoThreadMaxDialog,
   ),
   SwitchModel(
     title: '评论区搜索关键词',
@@ -260,4 +274,96 @@ Future<void> _showReplyDepthDialog(
     GStorage.setting.put(SettingBoxKey.foldDepth, res.toInt());
     setState();
   }
+}
+
+/// 「自动线程化条数上限」的预设档位。0 表示不限制。
+const _autoThreadMaxPresets = [50, 100, 200, 500, 1000, 0];
+
+String _autoThreadMaxSubtitle() {
+  final max = Pref.autoReplyThreadMax;
+  if (max <= 0) {
+    return '不限制条数，回复较多时会拉取全部内容\n请留意流量消耗与风控风险';
+  }
+  return '回复数超过 $max 条时不自动拉取，改为手动点按钮';
+}
+
+Future<void> _showAutoThreadMaxDialog(
+  BuildContext context,
+  VoidCallback setState,
+) async {
+  final current = Pref.autoReplyThreadMax;
+  final options = <(int, String)>[
+    for (final v in _autoThreadMaxPresets) (v, v <= 0 ? '不限制' : '$v 条'),
+  ];
+  // 自定义值不在预设里时补一项，避免选中态空白
+  if (!_autoThreadMaxPresets.contains(current)) {
+    options.add((current, '$current 条'));
+  }
+  options.add((-1, '自定义'));
+
+  final res = await showDialog<int>(
+    context: context,
+    builder: (context) => SelectDialog<int>(
+      title: '自动线程化条数上限',
+      value: current,
+      values: options,
+    ),
+  );
+  if (res == null || !context.mounted) return;
+
+  if (res != -1) {
+    await GStorage.setting.put(SettingBoxKey.autoReplyThreadMax, res);
+    setState();
+    return;
+  }
+
+  // 自定义输入
+  String input = current.toString();
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('自动线程化条数上限'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('填 0 表示不限制'),
+          const SizedBox(height: 8),
+          TextFormField(
+            autofocus: true,
+            initialValue: input,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (value) => input = value,
+            decoration: const InputDecoration(suffixText: '条'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: Get.back,
+          child: Text(
+            '取消',
+            style: TextStyle(color: ColorScheme.of(context).outline),
+          ),
+        ),
+        TextButton(
+          onPressed: () async {
+            try {
+              final val = int.parse(input);
+              Get.back();
+              await GStorage.setting.put(
+                SettingBoxKey.autoReplyThreadMax,
+                val < 0 ? 0 : val,
+              );
+              setState();
+            } catch (e) {
+              SmartDialog.showToast(e.toString());
+            }
+          },
+          child: const Text('确定'),
+        ),
+      ],
+    ),
+  );
 }
