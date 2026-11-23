@@ -176,6 +176,11 @@ class VideoReplyReplyController extends ReplyController
     if (loadingState.value.isSuccess) {
       index.value = null;
     }
+    // 重载会换掉整份回复数据，旧树指向的是旧对象，留着会在下次切回线程视图时
+    // 显示过期内容。这里一并丢弃；下次进线程视图会按新数据重新建树。
+    if (!showReplyTree) {
+      replyTree.value = null;
+    }
     return super.onReload();
   }
 
@@ -301,7 +306,12 @@ class VideoReplyReplyController extends ReplyController
 
   @override
   Future<void> onRefresh() async {
-    if (replyTree.rawValue != null) return Future.syncValue(null);
+    // 只有在「正在显示线程视图」时才拦截刷新。
+    //
+    // 不能判 replyTree != null：线程树一旦建好就一直存在（按钮只是翻转
+    // showReplyTree 来切换显示），用户切回普通列表后树并没有销毁。若用
+    // replyTree 判空，切回普通列表后下拉刷新和排序依旧被挡住。
+    if (showReplyTree) return Future.syncValue(null);
     if (_inflightReply != null) await _inflightReply;
     _cancelReplyTimer();
     return super.onRefresh();
@@ -376,7 +386,11 @@ class VideoReplyReplyController extends ReplyController
 
   @override
   void queryBySort() {
-    if (replyTree.rawValue != null) return;
+    // 同 onRefresh：只有正在显示线程视图时才屏蔽排序。
+    //
+    // 上游用 replyTree != null 判断，但树建好后并不会随「切回普通列表」
+    // 销毁，导致点过一次线程化之后，普通列表下排序永久失效。
+    if (showReplyTree) return;
     super.queryBySort();
   }
 
