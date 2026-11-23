@@ -285,11 +285,6 @@ class VideoReplyReplyController extends ReplyController
       progress.value =
           (loadingState.rawValue.dataOrNull?.length ?? 0) / count.rawValue;
     }
-    // 排序重载：数据已换成新顺序，若此前在线程视图里，把树按新顺序重建。
-    if (_rebuildTreeAfterSort) {
-      _rebuildTreeAfterSort = false;
-      _rebuildThreadAfterSort();
-    }
   }
 
   @override
@@ -379,49 +374,10 @@ class VideoReplyReplyController extends ReplyController
     );
   }
 
-  /// 退出线程视图，回到普通列表。
-  ///
-  /// 线程视图一旦建树，[queryBySort] / [onRefresh] 的守卫会让「按热度/按时间」
-  /// 彻底失效（上游原本的设计：排序只能作用于普通列表）。切换排序前必须先
-  /// 退出线程视图，否则点击排序按钮毫无反应。
-  void exitThreadTree() {
-    if (replyTree.rawValue == null && !showReplyTree) return;
-    showReplyTree = false;
-    replyTree.value = null;
-    _autoThreadKicked = true; // 退出后不要被自动逻辑再次拉起
-  }
-
-  /// 排序切换后是否要重建线程视图。
-  ///
-  /// 用户在线程视图下切排序时置位：此时必须先退出线程视图（否则排序被守卫
-  /// 短路），等新排序的数据重新拉全后再把树建回来，做到「切排序不掉出线程视图」。
-  bool _rebuildTreeAfterSort = false;
-
-  /// 排序切换。线程视图下记住待重建，退出线程视图后走基类的重载流程。
   @override
   void queryBySort() {
-    if (replyTree.rawValue != null) {
-      _rebuildTreeAfterSort = showReplyTree;
-      exitThreadTree();
-    }
+    if (replyTree.rawValue != null) return;
     super.queryBySort();
-  }
-
-  /// 排序重载完成后的线程视图重建。
-  ///
-  /// 与 [_maybeAutoThread] 的区别：不受「自动线程化展示」开关与条数上限约束——
-  /// 用户本来就停在线程视图里，重建只是把切换排序后丢掉的视图恢复回去，
-  /// 拉取量与他此前进树时付出的量级相同。
-  void _rebuildThreadAfterSort() {
-    if (isClosed || replyTree.rawValue != null) return;
-    if (inFetchReply) return;
-
-    // 单页就够，直接建树
-    if (isEnd && foldCard == null) {
-      buildTree();
-      return;
-    }
-    nextReplyRound();
   }
 
   void toggleCollapseTree(int index) {
